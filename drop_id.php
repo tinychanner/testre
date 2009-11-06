@@ -12,6 +12,7 @@ if($_POST['drop_ID'])
 	setcookie('topics_mode', '', $_SERVER['REQUEST_TIME'] - 3600, '/');
 	setcookie('spoiler_mode', '', $_SERVER['REQUEST_TIME'] - 3600, '/');
 	setcookie('snippet_length', '', $_SERVER['REQUEST_TIME'] - 3600, '/');
+	setcookie('trip', '', $_SERVER['REQUEST_TIME'] - 3600, '/');
 	
 	$_SESSION['notice'] = 'Your ID has been dropped.';
 }

@@ -10,11 +10,11 @@ if( ! ctype_digit($_GET['id']))
 
 if(ALLOW_IMAGES)
 {
-	$stmt = $link->prepare('SELECT topics.time, topics.author, topics.visits, topics.replies, topics.headline, topics.body, topics.edit_time, topics.edit_mod, images.file_name FROM topics LEFT OUTER JOIN images ON topics.id = images.topic_id WHERE topics.id = ?');
+	$stmt = $link->prepare('SELECT topics.time, topics.author, topics.author_name, topics.visits, topics.replies, topics.headline, topics.body, topics.edit_time, topics.edit_mod, images.file_name FROM topics LEFT OUTER JOIN images ON topics.id = images.topic_id WHERE topics.id = ?');
 }
 else
 {
-	$stmt = $link->prepare('SELECT time, author, visits, replies, headline, body, edit_time, edit_mod FROM topics WHERE id = ?');
+	$stmt = $link->prepare('SELECT time, author, author_name, visits, replies, headline, body, edit_time, edit_mod FROM topics WHERE id = ?');
 }
 $stmt->bind_param('i', $_GET['id']);
 
@@ -30,11 +30,11 @@ if($stmt->num_rows < 1)
 
 if(ALLOW_IMAGES)
 {
-	$stmt->bind_result($topic_time, $topic_author, $topic_visits, $topic_replies, $topic_headline, $topic_body, $topic_edit_time, $topic_edit_mod, $topic_image_name);
+	$stmt->bind_result($topic_time, $topic_author, $topic_author_name, $topic_visits, $topic_replies, $topic_headline, $topic_body, $topic_edit_time, $topic_edit_mod, $topic_image_name);
 }
 else
 {
-	$stmt->bind_result($topic_time, $topic_author, $topic_visits, $topic_replies, $topic_headline, $topic_body, $topic_edit_time, $topic_edit_mod);
+	$stmt->bind_result($topic_time, $topic_author, $topic_author_name, $topic_visits, $topic_replies, $topic_headline, $topic_body, $topic_edit_time, $topic_edit_mod);
 }
 $stmt->fetch();
 $stmt->close();
@@ -86,7 +86,7 @@ dummy_form();
 echo '<h3>';
 if($topic_author == 'admin')
 {
-	echo '<strong>' . ADMIN_NAME . '</strong> ';
+	echo '<strong class="admin">' . ADMIN_NAME . '</strong> ';
 }
 else
 {
@@ -94,7 +94,14 @@ else
 	{
 		echo '<a href="/profile/' . $topic_author . '">';
 	}
-	echo 'Anonymous <strong>A</strong>';
+	if(empty($topic_author_name))
+	{
+		echo 'Anonymous <strong>A</strong>';
+	}
+	else
+	{
+		echo trip($topic_author_name);
+	}
 	if($moderator || $administrator)
 	{
 		echo '</a>';
@@ -137,21 +144,21 @@ echo '<li><a href="/watch_topic/' . $_GET['id'] . '" onclick="return submitDummy
 // Output replies.
 if(ALLOW_IMAGES)
 {
-	$stmt = $link->prepare('SELECT replies.id, replies.time, replies.author, replies.poster_number, replies.body, replies.edit_time, replies.edit_mod, images.file_name FROM replies LEFT OUTER JOIN images ON replies.id = images.reply_id WHERE replies.parent_id = ? ORDER BY id');
+	$stmt = $link->prepare('SELECT replies.id, replies.time, replies.author, replies.author_name, replies.poster_number, replies.body, replies.edit_time, replies.edit_mod, images.file_name FROM replies LEFT OUTER JOIN images ON replies.id = images.reply_id WHERE replies.parent_id = ? ORDER BY id');
 }
 else
 {
-	$stmt = $link->prepare('SELECT id, time, author, poster_number, body, edit_time, edit_mod FROM replies WHERE parent_id = ? ORDER BY id');
+	$stmt = $link->prepare('SELECT id, time, author, author_name, poster_number, body, edit_time, edit_mod FROM replies WHERE parent_id = ? ORDER BY id');
 }
 $stmt->bind_param('i', $_GET['id']);
 $stmt->execute();
 if(ALLOW_IMAGES)
 {
-	$stmt->bind_result($reply_id, $reply_time, $reply_author, $reply_poster_number, $reply_body, $reply_edit_time, $reply_edit_mod, $reply_image_name);
+	$stmt->bind_result($reply_id, $reply_time, $reply_author, $reply_author_name, $reply_poster_number, $reply_body, $reply_edit_time, $reply_edit_mod, $reply_image_name);
 }
 else
 {
-	$stmt->bind_result($reply_id, $reply_time, $reply_author, $reply_poster_number, $reply_body, $reply_edit_time, $reply_edit_mod);
+	$stmt->bind_result($reply_id, $reply_time, $reply_author, $reply_author_name, $reply_poster_number, $reply_body, $reply_edit_time, $reply_edit_mod);
 }
 
 $reply_ids = array();
@@ -194,7 +201,7 @@ while($stmt->fetch())
 	
 	if($reply_author == 'admin')
 	{
-		$out['author'] = '<strong>' . ADMIN_NAME . '</strong>';
+		$out['author'] = '<strong class="admin">' . ADMIN_NAME . '</strong>';
 	}
 	else
 	{
@@ -203,16 +210,23 @@ while($stmt->fetch())
 			$out['author'] = '<a href="/profile/' . $reply_author . '">';
 		}
 		
-		$out['author'] .= 'Anonymous <strong>';
-		if($reply_author == $topic_author)
+		if(empty($reply_author_name))
 		{
-			$out['author'] .= 'A';
+			$out['author'] .= 'Anonymous <strong>';
+			if($reply_author == $topic_author)
+			{
+				$out['author'] .= 'A';
+			}
+			else
+			{
+				$out['author'] .= number_to_letter($reply_poster_number);
+			}
+			$out['author'] .= '</strong>';
 		}
 		else
 		{
-			$out['author'] .= number_to_letter($reply_poster_number);
+			$out['author'] .= trip($reply_author_name);
 		}
-		$out['author'] .= '</strong>';
 		
 		if($moderator || $administrator)
 		{

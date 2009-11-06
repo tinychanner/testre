@@ -13,7 +13,7 @@ if($_GET['reply'])
 		add_error('Invalid topic ID.', true);
 	}
 	
-	$stmt = $link->prepare('SELECT headline, author, replies FROM topics WHERE id = ?');
+	$stmt = $link->prepare('SELECT headline, author, author_name, replies FROM topics WHERE id = ?');
 	$stmt->bind_param('i', $_GET['reply']);
 	$stmt->execute();
 	$stmt->store_result();
@@ -22,7 +22,7 @@ if($_GET['reply'])
 		$page_title = 'Non-existent topic';
 		add_error('There is no such topic. It may have been deleted.', true);
 	}
-	$stmt->bind_result($replying_to, $topic_author, $topic_replies);
+	$stmt->bind_result($replying_to, $topic_author, $topic_author_name, $topic_replies);
 	$stmt->fetch();
 	$stmt->close();
 	
@@ -38,6 +38,28 @@ if($_GET['reply'])
 		$watching_topic = true;
 	}
 	$check_watchlist->close();
+	
+	// Check for previous post
+	$already_replied = false;
+	if($_SESSION['UID'] === $topic_author)
+	{
+		$already_replied = true;
+		$previous_trip = $topic_author_name;
+	}
+	else if( ! $_GET['edit'])
+	{
+		$get_trip = $link->prepare('SELECT author_name FROM replies WHERE author = ? AND parent_id = ? LIMIT 1');
+		$get_trip->bind_param('si', $_SESSION['UID'], $_GET['reply']);
+		$get_trip->execute();
+		$get_trip->store_result();
+		if($get_trip->num_rows > 0)
+		{
+			$already_replied = true;
+			$get_trip->bind_result($previous_trip);
+			$get_trip->fetch();
+		}
+		$get_trip->close();
+	}
 }
 else // this is a topic
 {
@@ -317,6 +339,57 @@ if($_POST['form_sent'])
 			$author = 'admin';
 		}
 		
+		// Take care of trips/namefaggotry (public)
+		if($already_replied)
+		{
+			$author_name = $previous_trip;
+		}
+		else if( ! empty($_POST['trip']))
+		{
+			list($author_name, $author_trip) = explode('#', $_POST['trip'], 2);
+			$author_name = super_trim($author_name);
+			
+			check_length($author_name, 'name', 0, 25);
+			
+			if(strtolower($author_name) == strtolower(ADMIN_NAME))
+			{
+				add_error('That name is reserved for the administrator.');
+			}
+			else if(preg_match('/^Anonymous\s[A-Z]$/', $author_name))
+			{
+				add_error('That name is reserved.');
+			}
+			
+			if( ! empty($author_trip))
+			{
+				setcookie('trip', $author_name . '#' . $author_trip, $_SERVER['REQUEST_TIME'] + 315569260, '/');
+			
+				$author_trip = mb_convert_encoding($author_trip, 'SJIS', 'UTF-8');
+				$trip_salt = preg_replace('[^.-z]', '.', substr($author_trip . "H.", 1, 2));
+				$trip_salt = strtr($trip_salt, ':;<=>?@[\\]^_`', 'ABCDEFGabcdef');
+				$author_trip = substr( crypt($author_trip, $trip_salt), -10);
+				
+				$author_name = $author_name . '#' . $author_trip;
+			}
+			
+			if($reply)
+			{
+				$unique_trip = $link->prepare('SELECT 1 FROM replies WHERE LOWER(author_name) = ? AND parent_id = ? LIMIT 1');
+				$unique_trip->bind_param('si', strtolower($author_name), $_GET['reply']);
+				$unique_trip->execute();
+				$unique_trip->store_result();
+				if($unique_trip->num_rows > 0 || ($_SESSION['UID'] !== $topic_author && $author_name == $topic_author_name))
+				{
+					add_error('Someone else is already using that name in this thread.');
+				}
+				$unique_trip->close();
+			}
+		}
+		if(empty($author_name))
+		{
+			$author_name = null;
+		}
+		
 		// If this is a reply...
 		if($reply) 
 		{	
@@ -380,8 +453,8 @@ if($_POST['form_sent'])
 					}
 				}
 		
-				$stmt = $link->prepare('INSERT INTO replies (author, author_ip, poster_number, parent_id, body, time) VALUES (?, ?, ?, ?, ?, UNIX_TIMESTAMP())');
-				$stmt->bind_param('ssiis', $author, $_SERVER['REMOTE_ADDR'], $poster_number, $_GET['reply'], $body);
+				$stmt = $link->prepare('INSERT INTO replies (author, author_name, author_ip, poster_number, parent_id, body, time) VALUES (?, ?, ?, ?, ?, ?, UNIX_TIMESTAMP())');
+				$stmt->bind_param('sssiis', $author, $author_name, $_SERVER['REMOTE_ADDR'], $poster_number, $_GET['reply'], $body);
 				$congratulation = 'Reply posted.';
 			}
 			else // editing
@@ -416,8 +489,8 @@ if($_POST['form_sent'])
 				$stmt->close();
 				
 				// Prepare our query...
-				$stmt = $link->prepare('INSERT INTO topics (author, author_ip, headline, body, last_post, time) VALUES (?, ?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())');
-				$stmt->bind_param('ssss', $author, $_SERVER['REMOTE_ADDR'], $headline, $body);
+				$stmt = $link->prepare('INSERT INTO topics (author, author_name, author_ip, headline, body, last_post, time) VALUES (?, ?, ?, ?, ?, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())');
+				$stmt->bind_param('sssss', $author, $author_name, $_SERVER['REMOTE_ADDR'], $headline, $body);
 				$congratulation = 'Topic created.';
 			}
 			else // editing
@@ -654,13 +727,29 @@ if($reply && isset($visited_topics[ $_GET['reply'] ]) && $visited_topics[ $_GET[
 		<?php if( ! $reply): ?>
 		<div class="row">
 			<label for="headline">Headline</label> <script type="text/javascript"> printCharactersRemaining('headline_remaining_characters', 100); </script>
-			<input id="headline" name="headline" tabindex="1" type="text" size="124" maxlength="100" onkeydown="updateCharactersRemaining('headline', 'headline_remaining_characters', 100);" onkeyup="updateCharactersRemaining('headline', 'headline_remaining_characters', 100);" value="<?php if($_POST['form_sent'] || $editing) echo htmlspecialchars($headline) ?>">
+			<input id="headline" name="headline" tabindex="1" type="text" size="124" maxlength="100" onkeydown="updateCharactersRemaining('headline', 'headline_remaining_characters', 100);" onkeyup="updateCharactersRemaining('headline', 'headline_remaining_characters', 100);" value="<?php if($_POST['form_sent'] || $editing) echo htmlspecialchars($headline) ?>" />
+		</div>
+		<?php endif; ?>
+		
+		<?php if( ! $already_replied && ! $editing): ?>
+		<div class="row">
+			<label for="trip">Name</label> (optional)
+			<input id="trip" name="trip" tabindex="2" type="text" size="25" maxlength="50" value="<?php
+			if( ! empty($_POST['trip'])) 
+			{
+				echo htmlspecialchars($_POST['trip']) ;
+			}
+			else if( ! empty($_COOKIE['trip']))
+			{
+				echo htmlspecialchars($_COOKIE['trip']);
+			}
+			?>" />
 		</div>
 		<?php endif; ?>
 		
 		<div class="row">
 			<label for="body" class="noscreen">Post body</label> 
-			<textarea name="body" cols="120" rows="18" tabindex="2" id="body"><?php
+			<textarea name="body" cols="120" rows="18" tabindex="3" id="body"><?php
 			// If we've had an error or are previewing, print the submitted text.
 			if($_POST['form_sent'] || $editing)
 			{
@@ -735,8 +824,8 @@ if($reply && isset($visited_topics[ $_GET['reply'] ]) && $visited_topics[ $_GET[
 			
 		
 		<div class="row">
-			<input type="submit" name="preview" tabindex="3" value="Preview" class="inline"<?php if(ALLOW_IMAGES) echo ' onclick="document.getElementById(\'image\').value=\'\'"' ?> /> 
-			<input type="submit" name="post" tabindex="4" value="<?php echo ($editing) ? 'Update' : 'Post' ?>" class="inline">
+			<input type="submit" name="preview" tabindex="4" value="Preview" class="inline"<?php if(ALLOW_IMAGES) echo ' onclick="document.getElementById(\'image\').value=\'\'"' ?> /> 
+			<input type="submit" name="post" tabindex="5" value="<?php echo ($editing) ? 'Update' : 'Post' ?>" class="inline">
 		</div>
 	</form>
 </div>

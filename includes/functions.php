@@ -461,6 +461,19 @@ function regenerate_config()
 	file_put_contents('cache/config.php', $output, LOCK_EX);
 }
 
+function trip($name_with_trip)
+{
+	list($name, $trip) = explode('#', $name_with_trip, 2);
+		
+	$out = '<strong>' . htmlspecialchars($name) . '</strong>';
+	if($trip)
+	{
+		$out .= ' #' . $trip;
+	}
+	
+	return $out;
+}
+
 /* ==============================================
                                   CHECKING
   ===============================================*/ 
