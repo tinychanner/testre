@@ -1,0 +1,14 @@
+INSTALLATION
+
+Your host must have PHP version 5.2 or greater. To check your host's version of PHP, create a page called test.php with the content "<?php echo phpversion() ?>". If it's less than 5.2, do not install ATBBS.
+
+- Download and unzip ATBBS_alpha.zip from the link above.
+- Create a MySQL database. Navigate to the database in phpmyadmin. Click the "import" tab and, as the file to import, select INSTALL.sql from the zip. Click Go.
+- Edit the database details in /includes/config.php. For example, if your database is named 'durrbbs', change line 8 to 'database' => 'durrbbs' .
+- Edit the other settings in config.php. In particular, change the DOMAIN definition to your domain.
+- Upload the contents of ATBBS_alpha.zip (except INSTALL.sql) to your root public directory.
+- Go to the back up ID page (yourdomain.com/back_up_ID). Replace ADMIN ID HERE in config.php with the ID found on that page. You are now the administrator.
+
+NOTES
+
+- File encoding must always be UTF-8 _without BOM_.
